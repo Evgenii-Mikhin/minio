@@ -1,0 +1,92 @@
+[24.04.2026 7:13] Sergey Borisov: Для самого теста нужны базовые вещи:
+
+- JDK 21+ и Maven 3.9+.
+- Доступ в интернет к https://duckduckgo.com/.
+- Selenium Manager должен иметь возможность найти/скачать ChromeDriver, либо он уже должен быть в кэше.
+- Конфиг по умолчанию из [config.properties](/Users/sborisov/IdeaProjects/AT/src/test/resources/config.properties:1) должен быть доступен в test resources.
+
+Для запуска именно в мобильном режиме с Side Panel критичны эти условия:
+
+- browser=chrome
+- headless=false
+- log.panel.enabled=true
+- chrome.mobile.enabled=true
+- Chrome должен быть Chrome for Testing или Chromium, а не обычный branded Chrome, потому что обычный Chrome у нас уже проявлял нестабильность с --load-extension.
+- Версия Chrome должна поддерживать Side Panel API; в manifest расширения стоит minimum_chrome_version: 116.
+- Расширение должно грузиться из src/test/resources/extensions/aut-logs-sidepanel/.
+- Локальный порт 127.0.0.1:17654 должен быть свободен, потому что панель читает live-log с http://127.0.0.1:17654/logs.
+- Окно Chrome должно быть достаточно широким. Сейчас стоит browser.window.width=1400, чтобы слева помещался mobile viewport, а справа штатная Chrome Side Panel.
+- Тест должен запускаться в GUI-сессии. В headless режиме Side Panel визуально не откроется, поэтому код прямо запрещает log.panel.enabled=true вместе с headless=true.
+
+Минимальная рабочая команда для нужного режима сейчас просто:
+
+
+mvn test -Dtest=DuckDuckGoSearchTest
+
+
+А вот так панель гарантированно не будет работать:
+
+
+mvn test -Dheadless=true
+mvn test -Dbrowser=firefox
+mvn test -Dlog.panel.enabled=false
+
+
+Главное: Side Panel здесь не часть DOM страницы DuckDuckGo. Это UI Chrome, открытый расширением в том же окне. Поэтому Selenium-скриншот страницы ее не увидит целиком; для проверки “панель рядом и не перекрывает контент” нужен системный скриншот окна Chrome, как я делал в последнем прогоне.
+[24.04.2026 7:13] Sergey Borisov: Зафиксировал в [README.md](/Users/sborisov/IdeaProjects/AT/README.md:53): добавил отдельный раздел Предусловия.
+
+Там теперь явно описано:
+- что нужно для обычного запуска тестов;
+- какие флаги обязательны для мобильного режима с Chrome Side Panel;
+- почему нужен Chrome for Testing/Chromium;
+- что порт 127.0.0.1:17654 должен быть свободен;
+- почему нужен GUI/headed режим;
+- какие команды отключают панель;
+- почему для проверки панели нужен системный скриншот, а не Selenium screenshot страницы.
+
+Проверил содержимое README через nl и rg, блок стоит на месте и ключевые условия находятся в файле.
+
+[24.04.2026 7:13] Sergey Borisov: без всяких веб-сокетов
+[24.04.2026 7:14] Sergey Borisov: переноси к нам на уровень локального запуска, убедись что все каналы будут с этим работать. сделаешь - покажешь. потом перейдем к remote
+[24.04.2026 7:18] Sergey Borisov: Транспорт сделан очень просто: это не WebSocket и не CDP, а локальный HTTP polling через 127.0.0.1.
+
+Цепочка такая:
+
+1. Logback отправляет обычные тестовые логи в два appender-а: консоль и LOG_PANEL.
+   См. [logback-test.xml](/Users/sborisov/IdeaProjects/AT/src/test/resources/logback-test.xml:14).
+
+2. LogPanelAppender перехватывает каждое Logback-событие и передает level + уже отформатированное сообщение в BrowserLogSink.
+   См. [LogPanelAppender.java](/Users/sborisov/IdeaProjects/AT/src/test/java/com/example/at/logging/LogPanelAppender.java:11).
+
+3. В начале теста BaseTest.setUp() вызывает BrowserLogSink.startSession(): если панель включена, стартует локальный HTTP-сервер и очищается старый буфер логов.
+   См. [BaseTest.java](/Users/sborisov/IdeaProjects/AT/src/test/java/com/example/at/base/BaseTest.java:24) и [BrowserLogSink.java](/Users/sborisov/IdeaProjects/AT/src/test/java/com/example/at/logging/BrowserLogSink.java:15).
+
+4. BrowserLogSink.capture() нормализует сообщение и кладет его в LogPanelServer.
+   См. [BrowserLogSink.java](/Users/sborisov/IdeaProjects/AT/src/test/java/com/example/at/logging/BrowserLogSink.java:38).
+
+5. LogPanelServer держит in-memory ring buffer LOGS и поднимает endpoint:
+   GET http://127.0.0.1:17654/logs
+
+   Он возвращает JSON вида:
+
+
+{
+  "logs": [
+    {
+      "ts": 1710000000000,
+      "level": "INFO",
+      "message": "Demo step 2/11: Submitted first query..."
+    }
+  ]
+}
+
+
+См. [LogPanelServer.java](/Users/sborisov/IdeaProjects/AT/src/test/java/com/example/at/logging/LogPanelServer.java:27), [LogPanelServer.java](/Users/sborisov/IdeaProjects/AT/src/test/java/com/example/at/logging/LogPanelServer.java:62), [LogPanelServer.java](/Users/sborisov/IdeaProjects/AT/src/test/java/com/example/at/logging/LogPanelServer.java:71).
+
+6. Chrome Side Panel - это extension page. Ее JS каждые 500 ms делает fetch("http://127.0.0.1:17654/logs"), берет только новые записи через logs.slice(rendered) и дорисовывает их в панель.
+   См. [sidepanel.js](/Users/sborisov/IdeaProjects/AT/src/test/resources/extensions/aut-logs-sidepanel/sidepanel.js:5), [sidepanel.js](/Users/sborisov/IdeaProjects/AT/src/test/resources/extensions/aut-logs-sidepanel/sidepanel.js:57), [sidepanel.js](/Users/sborisov/IdeaProjects/AT/src/test/resources/extensions/aut-logs-sidepanel/sidepanel.js:88).
+
+Важный нюанс: расширение имеет host_permissions на http://127.0.0.1/* и http://localhost/*, поэтому side panel может читать локальный endpoint. См. [manifest.json](/Users/sborisov/IdeaProjects/AT/src/test/resources/extensions/aut-logs-sidepanel/manifest.json:11).
+
+То есть транспорт: Logback → Java in-memory buffer → localhost HTTP `/logs` → polling из Chrome Side Panel.
+[24.04.2026 7:18] Sergey Borisov: т.е. это http а не вебсокеты = будет работать стабильнее в условиях банковской сети и глючащего кластера куба. в микроксе тоже все на http пушах и работает норм
