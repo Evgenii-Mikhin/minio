@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AT Logs</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #12151d;
+        --panel: #1a1f2b;
+        --line: #252c3b;
+        --text: #e6ebf5;
+        --muted: #95a2bf;
+        --accent: #65c3ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top right, rgba(101, 195, 255, 0.18), transparent 35%),
+          var(--bg);
+        color: var(--text);
+        font: 12px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      }
+
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        background: rgba(18, 21, 29, 0.92);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .title {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .title strong {
+        font-size: 13px;
+        letter-spacing: 0.02em;
+      }
+
+      .title span {
+        color: var(--muted);
+      }
+
+      button {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      #logs {
+        padding: 12px;
+      }
+
+      .empty {
+        color: var(--muted);
+        padding: 24px 8px;
+      }
+
+      .line {
+        display: grid;
+        gap: 4px;
+        margin-bottom: 10px;
+        padding: 10px 12px;
+        background: rgba(26, 31, 43, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+      }
+
+      .meta {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        color: var(--muted);
+      }
+
+      .level {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .message {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <div class="title">
+        <strong>AT Logs</strong>
+        <span id="status">Waiting for logs...</span>
+      </div>
+      <button id="clear" type="button">Clear</button>
+    </div>
+
+    <div id="logs">
+      <div class="empty">Ожидаю логи автотеста...</div>
+    </div>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

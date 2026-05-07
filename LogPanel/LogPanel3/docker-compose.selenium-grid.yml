@@ -1,0 +1,47 @@
+services:
+  selenium-hub:
+    image: selenium/hub:4.31.0
+    container_name: logpanel-selenium-hub
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+
+  chrome:
+    build:
+      context: .
+      dockerfile: docker/selenium-node-chrome/Dockerfile
+    container_name: logpanel-selenium-chrome
+    shm_size: 2gb
+    depends_on:
+      - selenium-hub
+    ports:
+      - "5900:5900"
+      - "7900:7900"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./src/test/resources/extensions/aut-logs-sidepanel:/opt/at/extensions/aut-logs-sidepanel:ro
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=1
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_NODE_SESSION_TIMEOUT=120
+      - SE_SCREEN_WIDTH=1920
+      - SE_SCREEN_HEIGHT=1080
+      - SE_SCREEN_DEPTH=24
+      - SE_VNC_PASSWORD=secret
+
+  chrome-video:
+    image: selenium/video:ffmpeg-7.1-20250414
+    container_name: logpanel-selenium-chrome-video
+    depends_on:
+      - chrome
+    volumes:
+      - ./target/selenium-videos:/videos
+    environment:
+      - DISPLAY_CONTAINER_NAME=chrome
+      - SE_NODE_GRID_URL=http://selenium-hub:4444
+      - SE_VIDEO_FILE_NAME=auto
